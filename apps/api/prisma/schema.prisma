@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  createdAt     DateTime @default(now())
+
+  ledgerEntries LedgerEntry[]
+  purchases     Purchase[]
+  generations   Generation[]
+  deployments   Deployment[]
+}
+
+enum PurchaseStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+model Purchase {
+  id                     String         @id @default(cuid())
+  userId                 String
+  user                   User           @relation(fields: [userId], references: [id])
+  stripeSessionId        String         @unique
+  stripePaymentIntentId  String?        @unique
+  amountCents            Int
+  tokensPurchased        Int
+  status                 PurchaseStatus @default(PENDING)
+  createdAt              DateTime       @default(now())
+
+  invoice                Invoice?
+  ledgerEntry            LedgerEntry?
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  purchaseId    String   @unique
+  purchase      Purchase @relation(fields: [purchaseId], references: [id])
+  invoiceNumber String   @unique
+  amountCents   Int
+  issuedAt      DateTime @default(now())
+}
+
+enum GenerationStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+model Generation {
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id])
+  prompt            String
+  status            GenerationStatus  @default(PENDING)
+  llmModel          String
+  promptTokens      Int?
+  completionTokens  Int?
+  openrouterCostUsd Decimal?          @db.Decimal(10, 6)
+  tokensCharged     Int?
+  generatedFiles    Json?
+  createdAt         DateTime          @default(now())
+
+  deployment        Deployment?
+  ledgerEntry       LedgerEntry?
+}
+
+enum DeploymentStatus {
+  PENDING
+  LIVE
+  FAILED
+}
+
+model Deployment {
+  id            String           @id @default(cuid())
+  generationId  String           @unique
+  generation    Generation       @relation(fields: [generationId], references: [id])
+  userId        String
+  user          User             @relation(fields: [userId], references: [id])
+  status        DeploymentStatus @default(PENDING)
+  liveUrl       String?
+  tokensCharged Int?
+  createdAt     DateTime         @default(now())
+
+  ledgerEntry   LedgerEntry?
+}
+
+enum LedgerEntryType {
+  CREDIT_PURCHASE
+  DEBIT_GENERATION
+  DEBIT_DEPLOYMENT
+}
+
+model LedgerEntry {
+  id             String          @id @default(cuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id])
+  type           LedgerEntryType
+  amount         Int
+  runningBalance Int
+  purchaseId     String?         @unique
+  purchase       Purchase?       @relation(fields: [purchaseId], references: [id])
+  generationId   String?         @unique
+  generation     Generation?     @relation(fields: [generationId], references: [id])
+  deploymentId   String?         @unique
+  deployment     Deployment?     @relation(fields: [deploymentId], references: [id])
+  createdAt      DateTime        @default(now())
+}
