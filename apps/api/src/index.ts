@@ -2,9 +2,16 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import balanceRouter from "./routes/balance";
+import checkoutRouter from "./routes/checkout";
+import webhookRouter from "./routes/webhook";
 
 const app = express();
 app.use(cors());
+
+// Mounted before express.json() — the webhook route needs the raw body for
+// Stripe signature verification and parses it itself.
+app.use("/api", webhookRouter);
+
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
@@ -12,6 +19,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api", balanceRouter);
+app.use("/api", checkoutRouter);
 
 const PORT = process.env.PORT ?? 4000;
 app.listen(PORT, () => {
