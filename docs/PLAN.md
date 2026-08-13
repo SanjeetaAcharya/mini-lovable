@@ -14,15 +14,16 @@ Deadline: 17 August.
 - Prisma schema migrated to Neon Postgres. All six tables live. Demo user seeded.
 - Ledger service implemented and verified: `appendEntry()`, `getBalance()`, `reconstructBalance()`. Test run confirmed 5000 credit → 137 debit → 100 debit = 4763, with both balance methods agreeing and an over-debit correctly rejected.
 - `GET /api/balance` returning live data from the ledger.
-- Stripe integration (Phase 5). `POST /api/checkout` creates a Stripe Checkout Session plus a matching `PENDING` Purchase row, and returns the session URL — verified against the real Stripe test-mode API. `POST /api/webhook` verifies the Stripe signature on the raw body and credits the ledger on `checkout.session.completed`, using a conditional `status: PENDING → PAID` update as a compare-and-swap idempotency guard, with `Purchase.stripeSessionId` and `LedgerEntry.purchaseId`'s uniqueness as a DB-level backstop. Verified with the Stripe CLI listener: sequential duplicate delivery of the same event and two concurrent deliveries for a fresh purchase both credited the ledger exactly once.
+- Stripe integration (Phase 5). `POST /api/checkout` creates a Stripe Checkout Session plus a matching `PENDING` Purchase row, and returns the session URL — verified against the real Stripe test-mode API. `POST /api/webhook` verifies the Stripe signature on the raw body and credits the ledger on `checkout.session.completed`, using a conditional `status: PENDING → PAID` update as a compare-and-swap idempotency guard, with `Purchase.stripeSessionId` and `LedgerEntry.purchaseId`'s uniqueness as a DB-level backstop. Verified end to end with the Stripe CLI listener: a real hosted-Checkout payment with the `4242` test card credited the ledger exactly once, and resending the identical event via `stripe events resend` left the balance unchanged.
+- OpenRouter integration (Phase 6). `services/llm.service.ts` exports `generateSite(prompt)`: calls OpenRouter with a system prompt that forces bare-JSON output (`{"files": {...}}`, `index.html` required, no prose/fences/frameworks/CDNs), then parses and validates the response into a `FileMap`. Returns a `{status: "success" | "invalid_output" | "error"}` result — never throws on a bad model response. Malformed-output handling covers: prose with no JSON, markdown-fenced JSON (recovered), missing `index.html`, path traversal in a file name, truncated JSON, network failure, and a live 400 from an invalid model ID — each returns a diagnosable reason instead of crashing. Real token usage (`prompt_tokens`, `completion_tokens`, and `cost` when OpenRouter reports it) is read off the actual response via `usage: {include: true}`, not estimated. Verified live against `OPENROUTER_MODEL` (read from env, no hardcoded model): a real prompt returned a valid two-file site (`index.html` + `styles.css`) with real usage numbers. Not yet wired to billing or persistence — that's Phase 7.
 
 **In progress**
 
-- OpenRouter integration not yet started.
+- Generation billing (Phase 7) not yet started.
 
 **Remaining**
 
-OpenRouter integration → generation billing → sandboxed build → Vercel deployment → invoices and history → frontend → CI, README, walkthrough video.
+Generation billing → sandboxed build → Vercel deployment → invoices and history → frontend → CI, README, walkthrough video.
 
 ---
 
