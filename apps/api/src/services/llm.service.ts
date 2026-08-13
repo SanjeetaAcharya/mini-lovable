@@ -1,5 +1,10 @@
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+// Bounds worst-case completion length, which in turn bounds what a
+// generation can ever cost — see MIN_BALANCE_FOR_GENERATION in
+// config/pricing.ts, which is derived from this constant.
+const MAX_COMPLETION_TOKENS = 2000;
+
 export interface FileMap {
   [path: string]: string;
 }
@@ -57,6 +62,7 @@ export async function generateSite(prompt: string): Promise<LlmResult> {
         ],
         response_format: { type: "json_object" },
         usage: { include: true },
+        max_tokens: MAX_COMPLETION_TOKENS,
       }),
     });
   } catch (err) {
