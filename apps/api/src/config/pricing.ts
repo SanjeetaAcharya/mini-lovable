@@ -54,6 +54,16 @@ export const MIN_GENERATION_CHARGE_TOKENS = 1;
 // tokens at the rates above. Rounded up with headroom.
 export const MIN_BALANCE_FOR_GENERATION = 50;
 
+// --- Deployment pricing ---------------------------------------------------
+//
+// Deploying is a flat fee, not usage-metered: Vercel's deployment API
+// doesn't report a per-request cost the way OpenRouter does, and a deploy
+// is a single discrete action (push these exact already-generated files
+// live) rather than a variable-length piece of LLM inference. Denominated
+// in the same internal-token currency via INTERNAL_TOKENS_PER_USD, chosen
+// small relative to a typical generation's charge.
+export const DEPLOYMENT_FEE_TOKENS = 20;
+
 export interface LlmUsageForPricing {
   promptTokens: number;
   completionTokens: number;

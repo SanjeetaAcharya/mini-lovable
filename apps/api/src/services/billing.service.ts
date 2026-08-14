@@ -2,6 +2,7 @@ import { getBalance, appendEntry } from "./ledger.service";
 import {
   usageToInternalTokens,
   MIN_BALANCE_FOR_GENERATION,
+  DEPLOYMENT_FEE_TOKENS,
   LlmUsageForPricing,
 } from "../config/pricing";
 
@@ -50,4 +51,40 @@ export async function chargeForGeneration(
     generationId,
   });
   return tokensCharged;
+}
+
+export class InsufficientBalanceForDeploymentError extends Error {
+  constructor(public readonly balance: number, public readonly minimumRequired: number) {
+    super(`Balance ${balance} is below the ${minimumRequired}-token deployment fee`);
+    this.name = "InsufficientBalanceForDeploymentError";
+  }
+}
+
+/**
+ * Pre-flight check, run before a deploy touches Vercel or the database.
+ * Unlike generation, a deploy's cost is a known fixed fee up front — not a
+ * ceiling on unpredictable usage — so this is an exact check, not a
+ * conservative one.
+ */
+export async function assertSufficientBalanceForDeployment(userId: string): Promise<number> {
+  const balance = await getBalance(userId);
+  if (balance < DEPLOYMENT_FEE_TOKENS) {
+    throw new InsufficientBalanceForDeploymentError(balance, DEPLOYMENT_FEE_TOKENS);
+  }
+  return balance;
+}
+
+/**
+ * Debits the fixed deployment fee, linking the entry to this deployment.
+ * Only ever called after Vercel has confirmed the deployment is live —
+ * never charge for a deploy that didn't happen.
+ */
+export async function chargeForDeployment(userId: string, deploymentId: string): Promise<number> {
+  await appendEntry({
+    userId,
+    type: "DEBIT_DEPLOYMENT",
+    amount: -DEPLOYMENT_FEE_TOKENS,
+    deploymentId,
+  });
+  return DEPLOYMENT_FEE_TOKENS;
 }

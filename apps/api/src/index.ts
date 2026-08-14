@@ -5,6 +5,7 @@ import balanceRouter from "./routes/balance";
 import checkoutRouter from "./routes/checkout";
 import webhookRouter from "./routes/webhook";
 import generateRouter from "./routes/generate";
+import deployRouter from "./routes/deploy";
 
 const app = express();
 app.use(cors());
@@ -22,6 +23,7 @@ app.get("/health", (_req, res) => {
 app.use("/api", balanceRouter);
 app.use("/api", checkoutRouter);
 app.use("/api", generateRouter);
+app.use("/api", deployRouter);
 
 const PORT = process.env.PORT ?? 4000;
 app.listen(PORT, () => {
