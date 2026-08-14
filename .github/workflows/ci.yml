@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Generates the Prisma client from the schema only — no database
+      # connection required, so this needs no DATABASE_URL/secrets. Must
+      # run before typecheck: apps/api imports @prisma/client's generated
+      # types, which don't exist until this runs.
+      - run: npx prisma generate --schema=apps/api/prisma/schema.prisma
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
