@@ -6,6 +6,9 @@ import checkoutRouter from "./routes/checkout";
 import webhookRouter from "./routes/webhook";
 import generateRouter from "./routes/generate";
 import deployRouter from "./routes/deploy";
+import invoicesRouter from "./routes/invoices";
+import historyRouter from "./routes/history";
+import ledgerRouter from "./routes/ledger";
 
 const app = express();
 app.use(cors());
@@ -24,6 +27,9 @@ app.use("/api", balanceRouter);
 app.use("/api", checkoutRouter);
 app.use("/api", generateRouter);
 app.use("/api", deployRouter);
+app.use("/api", invoicesRouter);
+app.use("/api", historyRouter);
+app.use("/api", ledgerRouter);
 
 const PORT = process.env.PORT ?? 4000;
 app.listen(PORT, () => {

@@ -118,4 +118,22 @@ export async function creditPurchaseFromSession(session: Stripe.Checkout.Session
     }
     throw err;
   }
+
+  // Invoice number is derived from the purchase id rather than a separate
+  // counter — it's already guaranteed unique, so there's nothing extra to
+  // coordinate. Non-fatal on failure: the balance is already correctly
+  // credited (the part that matters), and a missing invoice for the rare
+  // crash-between-credit-and-here case can be regenerated later rather
+  // than risking the credited money on an invoice-row failure.
+  try {
+    await prisma.invoice.create({
+      data: {
+        purchaseId: purchase.id,
+        invoiceNumber: `INV-${purchase.id}`,
+        amountCents: purchase.amountCents,
+      },
+    });
+  } catch (err) {
+    console.error(`Failed to create invoice for purchase ${purchase.id}:`, err);
+  }
 }
