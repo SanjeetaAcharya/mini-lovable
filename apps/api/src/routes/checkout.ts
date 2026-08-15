@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createCheckoutSession, UnknownTokenPackError } from "../services/stripe.service";
 import { TOKEN_PACKS } from "../config/pricing";
+import { asyncHandler } from "../middleware/asyncHandler";
 
 const router = Router();
 
@@ -11,24 +12,26 @@ router.get("/checkout/packs", (_req, res) => {
   res.json({ packs: TOKEN_PACKS });
 });
 
-router.post("/checkout", async (req, res) => {
-  const { packId } = req.body ?? {};
-  if (typeof packId !== "string") {
-    res.status(400).json({ error: "packId is required" });
-    return;
-  }
-
-  try {
-    const { url } = await createCheckoutSession(DEMO_USER_ID, packId);
-    res.json({ url });
-  } catch (err) {
-    if (err instanceof UnknownTokenPackError) {
-      res.status(400).json({ error: err.message });
+router.post(
+  "/checkout",
+  asyncHandler(async (req, res) => {
+    const { packId } = req.body ?? {};
+    if (typeof packId !== "string") {
+      res.status(400).json({ error: "packId is required" });
       return;
     }
-    console.error(err);
-    res.status(500).json({ error: "Failed to create checkout session" });
-  }
-});
+
+    try {
+      const { url } = await createCheckoutSession(DEMO_USER_ID, packId);
+      res.json({ url });
+    } catch (err) {
+      if (err instanceof UnknownTokenPackError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      throw err; // picked up by errorHandler via asyncHandler
+    }
+  })
+);
 
 export default router;

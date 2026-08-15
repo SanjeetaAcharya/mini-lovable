@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 import { deployToVercel } from "../services/deployment.service";
 import {
   assertSufficientBalanceForDeployment,
@@ -8,15 +8,21 @@ import {
 } from "../services/billing.service";
 import { InsufficientBalanceError } from "../services/ledger.service";
 import type { FileMap } from "../services/llm.service";
+import { asyncHandler } from "../middleware/asyncHandler";
 
-const prisma = new PrismaClient();
 const router = Router();
 
 // No auth yet — hardcoded to the one seeded demo user.
 const DEMO_USER_ID = process.env.DEMO_USER_ID!;
 
-router.post("/deploy/:generationId", async (req, res) => {
-  const { generationId } = req.params;
+router.post(
+  "/deploy/:generationId",
+  asyncHandler(async (req, res) => {
+  // @types/express is pinned to v5 (runtime is Express 4), whose types
+  // widen route params to `string | string[]` to account for wildcard
+  // segments. `:generationId` is a named segment, never an array at
+  // runtime.
+  const generationId = req.params.generationId as string;
 
   const generation = await prisma.generation.findFirst({
     where: { id: generationId, userId: DEMO_USER_ID },
@@ -115,6 +121,7 @@ router.post("/deploy/:generationId", async (req, res) => {
     }
     throw err;
   }
-});
+  })
+);
 
 export default router;

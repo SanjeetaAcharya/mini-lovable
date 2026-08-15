@@ -1,6 +1,5 @@
-import { PrismaClient, LedgerEntryType } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import type { LedgerEntryType } from "@prisma/client";
+import { prisma, withRetry } from "../lib/prisma";
 
 export class InsufficientBalanceError extends Error {
   constructor(required: number, available: number) {
@@ -25,7 +24,11 @@ interface AppendEntryInput {
  * can't race past each other and produce a negative balance.
  */
 export async function appendEntry(input: AppendEntryInput) {
-  return prisma.$transaction(async (tx) => {
+  // The whole transaction is retried as one unit on a transient
+  // connection error, not any single statement inside it — see
+  // lib/prisma.ts for why that's the safe way to retry an atomic
+  // operation like this one.
+  return withRetry(() => prisma.$transaction(async (tx) => {
     const latest = await tx.ledgerEntry.findFirst({
       where: { userId: input.userId },
       orderBy: { createdAt: "desc" },
@@ -49,7 +52,7 @@ export async function appendEntry(input: AppendEntryInput) {
         deploymentId: input.deploymentId,
       },
     });
-  });
+  }));
 }
 
 /**

@@ -1,9 +1,7 @@
 import Stripe from "stripe";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 import { getTokenPack } from "../config/pricing";
 import { appendEntry } from "./ledger.service";
-
-const prisma = new PrismaClient();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 

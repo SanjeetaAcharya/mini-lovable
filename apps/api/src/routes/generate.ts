@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 import { generateSite } from "../services/llm.service";
 import {
   assertSufficientBalance,
@@ -7,8 +7,8 @@ import {
   InsufficientBalanceForGenerationError,
 } from "../services/billing.service";
 import { getBalance, InsufficientBalanceError } from "../services/ledger.service";
+import { asyncHandler } from "../middleware/asyncHandler";
 
-const prisma = new PrismaClient();
 const router = Router();
 
 // No auth yet — hardcoded to the one seeded demo user.
@@ -50,7 +50,9 @@ function validatePrompt(input: unknown): PromptValidation {
   return { ok: true, prompt };
 }
 
-router.post("/generate", async (req, res) => {
+router.post(
+  "/generate",
+  asyncHandler(async (req, res) => {
   const validated = validatePrompt(req.body?.prompt);
   if (!validated.ok) {
     res.status(400).json({ error: validated.error });
@@ -160,6 +162,7 @@ router.post("/generate", async (req, res) => {
     message: result.message,
     generationId: generation.id,
   });
-});
+  })
+);
 
 export default router;
