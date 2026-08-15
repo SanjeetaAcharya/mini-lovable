@@ -3,13 +3,20 @@ import { apiUrl, type History, type LedgerEntry } from "../lib/api";
 interface Props {
   ledger: LedgerEntry[];
   history: History | null;
+  /** True until the initial load finishes, including through a cold start. */
+  loading?: boolean;
 }
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
-export function HistoryPanel({ ledger, history }: Props) {
+export function HistoryPanel({ ledger, history, loading = false }: Props) {
+  // While the initial load is still in flight, "No activity yet." would be
+  // a claim we haven't verified — and on a cold start it's the difference
+  // between the page looking empty and the page looking broken.
+  const empty = (message: string) => (loading ? "Loading…" : message);
+
   return (
     <div className="space-y-8">
       <section>
@@ -39,7 +46,7 @@ export function HistoryPanel({ ledger, history }: Props) {
               {ledger.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-3 text-neutral-400">
-                    No activity yet.
+                    {empty("No activity yet.")}
                   </td>
                 </tr>
               )}
@@ -87,7 +94,7 @@ export function HistoryPanel({ ledger, history }: Props) {
               {(!history || history.purchases.length === 0) && (
                 <tr>
                   <td colSpan={5} className="py-3 text-neutral-400">
-                    No purchases yet.
+                    {empty("No purchases yet.")}
                   </td>
                 </tr>
               )}
@@ -122,7 +129,7 @@ export function HistoryPanel({ ledger, history }: Props) {
               {(!history || history.generations.length === 0) && (
                 <tr>
                   <td colSpan={4} className="py-3 text-neutral-400">
-                    No generations yet.
+                    {empty("No generations yet.")}
                   </td>
                 </tr>
               )}
@@ -163,7 +170,7 @@ export function HistoryPanel({ ledger, history }: Props) {
               {(!history || history.deployments.length === 0) && (
                 <tr>
                   <td colSpan={4} className="py-3 text-neutral-400">
-                    No deployments yet.
+                    {empty("No deployments yet.")}
                   </td>
                 </tr>
               )}

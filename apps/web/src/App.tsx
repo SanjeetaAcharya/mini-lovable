@@ -5,7 +5,7 @@ import {
   getBalance,
   getHistory,
   getLedger,
-  getPacks,
+  loadInitialData,
   startCheckout,
   type FileMap,
   type History,
@@ -17,8 +17,13 @@ import { GenerateForm, type GenerationState } from "./components/GenerateForm";
 import { PreviewFrame } from "./components/PreviewFrame";
 import { DeployPanel, type DeployState } from "./components/DeployPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
+import { LoadStatus } from "./components/LoadStatus";
 
 type CheckoutNotice = { kind: "success" | "cancelled" } | null;
+
+// "waking" is the cold-start case: the request is in flight but the
+// (free-tier) API is likely still spinning up, so we say so out loud.
+type LoadState = "loading" | "waking" | "ready" | "failed";
 
 function App() {
   const [balance, setBalance] = useState<number | null>(null);
@@ -32,6 +37,10 @@ function App() {
 
   const [history, setHistory] = useState<History | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  // Bumping this re-runs the initial load, for the Retry button.
+  const [reloadKey, setReloadKey] = useState(0);
 
   // No router: this app is a single page, so the Stripe return trip is
   // read directly off the URL once, via a lazy initializer, rather than
@@ -53,12 +62,32 @@ function App() {
     setLedger(l);
   }
 
+  // Initial load, retried through a possible cold start on the API's
+  // free-tier host. Re-runs when reloadKey changes (the Retry button).
   useEffect(() => {
-    getPacks().then(setPacks).catch(() => {});
-    getBalance().then(setBalance).catch(() => {});
-    getHistory().then(setHistory).catch(() => {});
-    getLedger().then(setLedger).catch(() => {});
+    let cancelled = false;
 
+    loadInitialData(() => {
+      if (!cancelled) setLoadState("waking");
+    })
+      .then((data) => {
+        if (cancelled) return;
+        setBalance(data.balance);
+        setPacks(data.packs);
+        setHistory(data.history);
+        setLedger(data.ledger);
+        setLoadState("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setLoadState("failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  useEffect(() => {
     if (checkoutNotice === null) return;
 
     // The notice was already captured into state by the lazy initializer
@@ -144,6 +173,8 @@ function App() {
     <div className="mx-auto max-w-3xl px-4 py-8 text-neutral-900">
       <h1 className="mb-6 text-xl font-semibold">mini-lovable</h1>
 
+      <LoadStatus state={loadState} onRetry={() => { setLoadState("loading"); setReloadKey((k) => k + 1); }} />
+
       {checkoutNotice && (
         <div
           className={`mb-6 flex items-center justify-between rounded border px-3 py-2 text-sm ${
@@ -177,7 +208,7 @@ function App() {
       )}
 
       <div className="mt-12 border-t border-neutral-200 pt-8">
-        <HistoryPanel ledger={ledger} history={history} />
+        <HistoryPanel ledger={ledger} history={history} loading={loadState !== "ready" && loadState !== "failed"} />
       </div>
     </div>
   );

@@ -89,15 +89,28 @@ export interface LedgerEntry {
   deploymentId: string | null;
 }
 
+/**
+ * GET a JSON endpoint, throwing on a non-OK status instead of returning
+ * a half-parsed body. Matters for the cold-start path: a sleeping Render
+ * instance answers with a 502/503 HTML page, and without this check the
+ * caller would quietly end up with `undefined` and render an empty UI
+ * that looks like real (but empty) data rather than a failure to load.
+ */
+async function getJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) {
+    throw new Error(`GET ${path} failed: HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function getBalance(): Promise<number> {
-  const res = await fetch(`${BASE}/balance`);
-  const data = await res.json();
+  const data = await getJson<{ balance: number }>("/balance");
   return data.balance;
 }
 
 export async function getPacks(): Promise<TokenPack[]> {
-  const res = await fetch(`${BASE}/checkout/packs`);
-  const data = await res.json();
+  const data = await getJson<{ packs: TokenPack[] }>("/checkout/packs");
   return data.packs;
 }
 
@@ -163,12 +176,61 @@ export async function deploySite(generationId: string): Promise<DeployResult> {
 }
 
 export async function getHistory(): Promise<History> {
-  const res = await fetch(`${BASE}/history`);
-  return res.json();
+  return getJson<History>("/history");
 }
 
 export async function getLedger(): Promise<LedgerEntry[]> {
-  const res = await fetch(`${BASE}/ledger`);
-  const data = await res.json();
+  const data = await getJson<{ entries: LedgerEntry[] }>("/ledger");
   return data.entries;
+}
+
+export interface InitialData {
+  balance: number;
+  packs: TokenPack[];
+  history: History;
+  ledger: LedgerEntry[];
+}
+
+// The API is hosted on Render's free tier, which spins the instance down
+// after ~15 minutes of inactivity. The first request after that wakes it,
+// which can take 30-60s and may fail outright before it's ready. Since a
+// reviewer opening a cold link is the single most likely first
+// impression, retry rather than rendering an empty page that reads as
+// broken.
+const BOOTSTRAP_ATTEMPTS = 24;
+const BOOTSTRAP_RETRY_MS = 3000;
+// How long to wait before admitting to the user that we're waiting on a
+// sleeping server. A warm API answers in well under this, so the notice
+// never flashes up in the normal case.
+const COLD_START_NOTICE_MS = 2500;
+
+/**
+ * Loads everything the page needs, retrying through a cold start.
+ * `onSlow` fires once if the first attempt hasn't come back quickly, so
+ * the caller can show a "waking up the server" state instead of leaving
+ * the reviewer looking at blank tables.
+ */
+export async function loadInitialData(onSlow: () => void): Promise<InitialData> {
+  const noticeTimer = setTimeout(onSlow, COLD_START_NOTICE_MS);
+
+  try {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < BOOTSTRAP_ATTEMPTS; attempt++) {
+      try {
+        const [balance, packs, history, ledger] = await Promise.all([
+          getBalance(),
+          getPacks(),
+          getHistory(),
+          getLedger(),
+        ]);
+        return { balance, packs, history, ledger };
+      } catch (err) {
+        lastError = err;
+        await new Promise((resolve) => setTimeout(resolve, BOOTSTRAP_RETRY_MS));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("Could not reach the API");
+  } finally {
+    clearTimeout(noticeTimer);
+  }
 }
