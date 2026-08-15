@@ -8,9 +8,12 @@ export interface TokenPack {
 // Token packs offered at checkout. Prices are dynamic Stripe price_data,
 // not pre-created Stripe Price objects — no dashboard setup required.
 export const TOKEN_PACKS: TokenPack[] = [
-  { id: "starter", label: "Starter — 5,000 tokens", amountCents: 500, tokens: 5000 },
-  { id: "plus", label: "Plus — 12,000 tokens", amountCents: 1000, tokens: 12000 },
-  { id: "pro", label: "Pro — 30,000 tokens", amountCents: 2000, tokens: 30000 },
+  // `label` is the line-item name shown on the Stripe Checkout page. The
+  // app's own buy buttons compose their text from `tokens`/`amountCents`
+  // instead, so the price is visible before the user leaves the page.
+  { id: "starter", label: "Starter · 5,000 tokens", amountCents: 500, tokens: 5000 },
+  { id: "plus", label: "Plus · 12,000 tokens", amountCents: 1000, tokens: 12000 },
+  { id: "pro", label: "Pro · 30,000 tokens", amountCents: 2000, tokens: 30000 },
 ];
 
 export function getTokenPack(id: string): TokenPack | undefined {

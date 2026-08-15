@@ -18,6 +18,7 @@ import { PreviewFrame } from "./components/PreviewFrame";
 import { DeployPanel, type DeployState } from "./components/DeployPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { LoadStatus } from "./components/LoadStatus";
+import { checkoutErrorMessage, type UserFacingError } from "./lib/messages";
 
 type CheckoutNotice = { kind: "success" | "cancelled" } | null;
 
@@ -29,7 +30,7 @@ function App() {
   const [balance, setBalance] = useState<number | null>(null);
   const [packs, setPacks] = useState<TokenPack[]>([]);
   const [buyingPackId, setBuyingPackId] = useState<string | null>(null);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState<UserFacingError | null>(null);
 
   const [prompt, setPrompt] = useState("");
   const [generation, setGeneration] = useState<GenerationState>({ status: "idle" });
@@ -117,7 +118,7 @@ function App() {
       const url = await startCheckout(packId);
       window.location.href = url;
     } catch (err) {
-      setCheckoutError((err as Error).message);
+      setCheckoutError(checkoutErrorMessage((err as Error).message));
       setBuyingPackId(null);
     }
   }
@@ -142,7 +143,12 @@ function App() {
         minimumRequired: result.minimumRequired ?? 0,
       });
     } else {
-      setGeneration({ status: "failed", error: result.error, reason: result.reason });
+      setGeneration({
+        status: "failed",
+        httpStatus: result.status,
+        error: result.error,
+        reason: result.reason,
+      });
       refreshHistory().catch(() => {});
     }
   }
@@ -162,7 +168,12 @@ function App() {
         minimumRequired: result.minimumRequired ?? 0,
       });
     } else {
-      setDeployment({ status: "failed", error: result.error, message: result.message });
+      setDeployment({
+        status: "failed",
+        httpStatus: result.status,
+        error: result.error,
+        message: result.message,
+      });
       refreshHistory().catch(() => {});
     }
   }
@@ -170,10 +181,21 @@ function App() {
   const previewFiles: FileMap | null = generation.status === "succeeded" ? generation.files : null;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 text-neutral-900">
-      <h1 className="mb-6 text-xl font-semibold">mini-lovable</h1>
+    <div className="mx-auto max-w-3xl px-6 py-10 text-neutral-900">
+      <header className="mb-10">
+        <h1 className="text-lg font-semibold tracking-tight">mini-lovable</h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          Generate a static site from a prompt, preview it, and deploy it.
+        </p>
+      </header>
 
-      <LoadStatus state={loadState} onRetry={() => { setLoadState("loading"); setReloadKey((k) => k + 1); }} />
+      <LoadStatus
+        state={loadState}
+        onRetry={() => {
+          setLoadState("loading");
+          setReloadKey((k) => k + 1);
+        }}
+      />
 
       {checkoutNotice && (
         <div
@@ -184,7 +206,7 @@ function App() {
           }`}
         >
           <span>
-            {checkoutNotice.kind === "success" ? "Payment received — balance updated." : "Checkout cancelled."}
+            {checkoutNotice.kind === "success" ? "Payment received. Balance updated." : "Checkout cancelled."}
           </span>
           <button type="button" onClick={() => setCheckoutNotice(null)} className="ml-3 underline">
             Dismiss
@@ -192,24 +214,40 @@ function App() {
         </div>
       )}
 
-      {checkoutError && <p className="mb-4 text-sm text-red-600">{checkoutError}</p>}
-
-      <BalanceBar balance={balance} packs={packs} onBuy={handleBuy} buyingPackId={buyingPackId} />
-
-      <div className="my-8">
-        <GenerateForm prompt={prompt} onPromptChange={setPrompt} onSubmit={handleGenerate} state={generation} />
-      </div>
-
-      {previewFiles && (
-        <div className="my-8 space-y-4">
-          <PreviewFrame files={previewFiles} />
-          <DeployPanel state={deployment} onDeploy={handleDeploy} />
+      {checkoutError && (
+        <div className="mb-6 space-y-1.5">
+          <p className="text-sm text-red-700">{checkoutError.message}</p>
+          {checkoutError.detail && (
+            <details className="text-xs text-neutral-500">
+              <summary className="cursor-pointer select-none">Technical details</summary>
+              <p className="mt-1 font-mono break-words text-neutral-600">{checkoutError.detail}</p>
+            </details>
+          )}
         </div>
       )}
 
-      <div className="mt-12 border-t border-neutral-200 pt-8">
-        <HistoryPanel ledger={ledger} history={history} loading={loadState !== "ready" && loadState !== "failed"} />
-      </div>
+      <section className="border-b border-neutral-200 pb-8">
+        <BalanceBar balance={balance} packs={packs} onBuy={handleBuy} buyingPackId={buyingPackId} />
+      </section>
+
+      <section className="border-b border-neutral-200 py-10">
+        <GenerateForm prompt={prompt} onPromptChange={setPrompt} onSubmit={handleGenerate} state={generation} />
+      </section>
+
+      {previewFiles && (
+        <section className="space-y-5 border-b border-neutral-200 py-10">
+          <PreviewFrame files={previewFiles} />
+          <DeployPanel state={deployment} onDeploy={handleDeploy} />
+        </section>
+      )}
+
+      <section className="pt-12">
+        <HistoryPanel
+          ledger={ledger}
+          history={history}
+          loading={loadState !== "ready" && loadState !== "failed"}
+        />
+      </section>
     </div>
   );
 }

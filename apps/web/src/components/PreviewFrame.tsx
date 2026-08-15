@@ -10,7 +10,7 @@ export function PreviewFrame({ files }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="text-sm font-medium text-neutral-700">Preview</div>
+      <div className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">Preview</div>
       <iframe
         title="Generated site preview"
         srcDoc={buildPreviewDoc(files)}
