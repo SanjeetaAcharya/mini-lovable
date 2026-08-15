@@ -15,8 +15,18 @@ router.get(
   "/history",
   asyncHandler(async (_req, res) => {
     const [purchases, generations, deployments] = await Promise.all([
+      // PENDING purchases are deliberately excluded. A Purchase row is
+      // created up front, before redirecting to Stripe, so the webhook
+      // has something to look up by session id — that's what makes
+      // crediting idempotent. But a row only reaches PAID once payment
+      // is confirmed, so anyone who opens Checkout and backs out leaves
+      // a PENDING row behind permanently. Those are abandoned attempts,
+      // not purchases, and showing them in a purchase history reads as a
+      // failed payment. The rows stay in the database (the webhook and
+      // its idempotency guarantees still depend on them) — they're just
+      // not user-facing until they're real.
       prisma.purchase.findMany({
-        where: { userId: DEMO_USER_ID },
+        where: { userId: DEMO_USER_ID, status: { not: "PENDING" } },
         include: { invoice: true },
         orderBy: { createdAt: "desc" },
       }),
