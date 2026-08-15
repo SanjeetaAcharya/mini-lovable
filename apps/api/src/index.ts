@@ -26,8 +26,10 @@ process.on("uncaughtException", (err) => {
 });
 
 // Same env var stripe.service.ts uses for the Checkout success/cancel
-// redirect — one source of truth for "where the frontend lives."
-const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
+// redirect — one source of truth for "where the frontend lives." Trailing
+// slash stripped: a browser's real Origin header never has one, so
+// leaving it in would make every CORS check fail to match.
+const CLIENT_URL = (process.env.CLIENT_URL ?? "http://localhost:5173").replace(/\/+$/, "");
 
 const app = express();
 app.use(cors({ origin: CLIENT_URL }));

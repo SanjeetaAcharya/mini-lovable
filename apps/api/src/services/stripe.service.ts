@@ -5,7 +5,11 @@ import { appendEntry } from "./ledger.service";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
+// Trailing slash stripped defensively: an easy env var typo (or a
+// platform's dashboard auto-appending one) would otherwise produce a
+// double slash in success_url/cancel_url ("vercel.app//purchase/success"),
+// which the frontend's exact pathname check on return wouldn't match.
+const CLIENT_URL = (process.env.CLIENT_URL ?? "http://localhost:5173").replace(/\/+$/, "");
 
 export class UnknownTokenPackError extends Error {
   constructor(packId: string) {
