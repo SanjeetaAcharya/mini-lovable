@@ -40,9 +40,13 @@ Deadline: 17 August.
 
 README, walkthrough video.
 
+- Cold-start handling and history hygiene (post-deployment polish, driven by what a reviewer would actually hit first). Render's free tier sleeps after ~15 minutes idle, so the first request can take 30-60s or fail outright — and the frontend was swallowing those failures (`.catch(() => {})`), leaving a `—` balance and tables asserting "No activity yet.", which is indistinguishable from a broken app. `loadInitialData()` now retries the initial load for ~90s, surfaces a "Waking up the server" explanation once it's clearly not instant (a 2.5s threshold, so it never flashes on a warm API), shows "Loading…" rather than claiming there's no data, recovers on its own with no refresh, and falls back to a Retry button. The GET helpers also throw on a non-OK status instead of quietly yielding `undefined`, since a sleeping instance answers with a 502 HTML page. Verified by pointing a local build at a dead port (confirmed the notice appears and the tables say "Loading…"), then bringing an API up mid-retry and confirming the page filled in **without a refresh**; and separately against the live warm site, confirming neither banner appears and load takes ~1.4s.
+
+  Separately, abandoned checkouts turned out to leave `PENDING` purchase rows permanently: a `Purchase` row is created *before* redirecting to Stripe so the webhook can find it by session id (which is what makes crediting idempotent), so anyone who opens Checkout and backs out — a very likely reviewer action — leaves one behind. Deleting them by hand is whack-a-mole, so `/api/history` now excludes `PENDING`. The rows stay in the database, since the webhook's idempotency guarantees depend on them; they're simply not surfaced until payment is confirmed. Three earlier probe rows created during deployment testing were also expired in Stripe (so they can never be paid and fire a webhook for a row that no longer exists) and deleted, guarded by checks that each was `unpaid` in Stripe with no invoice and no ledger entry.
+
 **Known operational notes for the README**
 
-- Render free tier spins down after 15 minutes idle. A reviewer opening the app cold will wait ~30-60s for the first backend response, during which the balance shows `—`. Worth either warning about in the README or mitigating with a retry/"waking up" state in the frontend.
+- Render free tier still spins down after 15 minutes idle — the first load is genuinely slow, it's just now explained in the UI rather than looking broken. Worth mentioning in the README anyway so a reviewer isn't surprised.
 - Test-mode Stripe keys, the OpenRouter key, and the Neon `DATABASE_URL` are all set on Render. Rotate the Neon password and OpenRouter key after review — the Stripe keys are test-mode only and carry no financial risk.
 
 ---
