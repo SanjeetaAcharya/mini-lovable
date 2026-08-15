@@ -1,4 +1,17 @@
-const BASE = "/api";
+// Unset in local dev: requests to "/api/..." stay relative, and the Vite
+// dev server proxies them to localhost:4000 (see vite.config.ts). Set to
+// the deployed API's origin in production, baked in at build time.
+const API_ORIGIN = import.meta.env.VITE_API_URL ?? "";
+const BASE = `${API_ORIGIN}/api`;
+
+/**
+ * For links meant to be opened directly (e.g. an invoice's <a href>),
+ * not fetched — same origin logic as BASE, exported since components
+ * outside this module need it too.
+ */
+export function apiUrl(path: string): string {
+  return `${API_ORIGIN}${path}`;
+}
 
 export interface TokenPack {
   id: string;

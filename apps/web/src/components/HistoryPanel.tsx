@@ -1,4 +1,4 @@
-import type { History, LedgerEntry } from "../lib/api";
+import { apiUrl, type History, type LedgerEntry } from "../lib/api";
 
 interface Props {
   ledger: LedgerEntry[];
@@ -72,7 +72,7 @@ export function HistoryPanel({ ledger, history }: Props) {
                     {p.invoiceId ? (
                       <a
                         className="underline"
-                        href={`/api/invoices/${p.invoiceId}`}
+                        href={apiUrl(`/api/invoices/${p.invoiceId}`)}
                         target="_blank"
                         rel="noreferrer"
                       >

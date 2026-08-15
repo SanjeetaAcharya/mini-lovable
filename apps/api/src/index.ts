@@ -25,8 +25,12 @@ process.on("uncaughtException", (err) => {
   console.error("Uncaught exception (process kept alive):", err);
 });
 
+// Same env var stripe.service.ts uses for the Checkout success/cancel
+// redirect — one source of truth for "where the frontend lives."
+const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
+
 const app = express();
-app.use(cors());
+app.use(cors({ origin: CLIENT_URL }));
 
 // Mounted before express.json() — the webhook route needs the raw body for
 // Stripe signature verification and parses it itself.
