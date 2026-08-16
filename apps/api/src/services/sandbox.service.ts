@@ -13,6 +13,18 @@ export type SandboxResult =
 //   docker build -f docker/sandbox.Dockerfile -t mini-lovable-sandbox docker/
 const SANDBOX_IMAGE = process.env.SANDBOX_IMAGE ?? "mini-lovable-sandbox";
 
+/**
+ * Off unless explicitly switched on, because validation needs a Docker
+ * daemon and the deployed API doesn't have one: Render runs the app
+ * *inside* a container with no daemon socket, so every deploy would fail
+ * on infrastructure grounds rather than on anything about the generated
+ * site. Enable it where a daemon exists (local development, or a host
+ * that grants one) by setting SANDBOX_ENABLED=true.
+ */
+export function isSandboxEnabled(): boolean {
+  return process.env.SANDBOX_ENABLED === "true";
+}
+
 // Generous for a static-file check that does no build step, tight enough
 // that a hung or adversarial container can't tie up resources.
 const SANDBOX_TIMEOUT_MS = 15_000;

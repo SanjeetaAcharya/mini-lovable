@@ -7,6 +7,7 @@ import {
   InsufficientBalanceForDeploymentError,
 } from "../services/billing.service";
 import { InsufficientBalanceError } from "../services/ledger.service";
+import { isSandboxEnabled, validateInSandbox } from "../services/sandbox.service";
 import type { FileMap } from "../services/llm.service";
 import { asyncHandler } from "../middleware/asyncHandler";
 
@@ -63,6 +64,27 @@ router.post(
     throw err;
   }
 
+  const files = generation.generatedFiles as FileMap;
+
+  // Validate the generated files in a throwaway container before anything
+  // is published. Runs before the Deployment row is created, so a
+  // rejection leaves no record of an attempt that never reached Vercel —
+  // and no row to block a later deploy of the same generation.
+  if (isSandboxEnabled()) {
+    const validation = await validateInSandbox(files);
+    if (!validation.valid) {
+      res.status(422).json({
+        error: "Generated site failed sandbox validation",
+        reason: validation.reason,
+      });
+      return;
+    }
+  } else {
+    console.log(
+      `Sandbox validation skipped for generation ${generation.id} (SANDBOX_ENABLED is not "true")`
+    );
+  }
+
   const deployment = await prisma.deployment.create({
     data: {
       generationId: generation.id,
@@ -76,7 +98,7 @@ router.post(
   // again for the same generation before the `deployment` row exists
   // (e.g. a retry after a crash between create() and the Vercel call).
   const projectName = `mini-lovable-${generation.id}`.toLowerCase();
-  const result = await deployToVercel(generation.generatedFiles as FileMap, projectName);
+  const result = await deployToVercel(files, projectName);
 
   if (result.status === "error") {
     // Vercel never confirmed the deploy, so no charge — same principle as

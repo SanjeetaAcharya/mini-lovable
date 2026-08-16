@@ -10,7 +10,7 @@ Deadline: 17 August.
 
 **Complete**
 
-- Monorepo scaffolded with npm workspaces: `apps/web`, `apps/api`, `packages/shared`. API runs on port 4000, Vite frontend on 5173.
+- Monorepo scaffolded with npm workspaces: `apps/web`, `apps/api`. API runs on port 4000, Vite frontend on 5173. (A `packages/shared` workspace was scaffolded for shared types but never used — the two apps ended up sharing no payload types worth extracting, so it was dropped rather than left as an empty placeholder.)
 - Prisma schema migrated to Neon Postgres. All six tables live. Demo user seeded.
 - Ledger service implemented and verified: `appendEntry()`, `getBalance()`, `reconstructBalance()`. Test run confirmed 5000 credit → 137 debit → 100 debit = 4763, with both balance methods agreeing and an over-debit correctly rejected.
 - `GET /api/balance` returning live data from the ledger.
@@ -36,13 +36,15 @@ Deadline: 17 August.
 
   Verified on the public URLs with a scripted browser run, after the fixes: a real test-mode payment with the `4242` card credited the ledger by exactly +5000 via the deployed webhook (deliberately re-tested *after* signature verification was confirmed, because the local and deployed APIs share one Neon database — an earlier-looking credit could equally have come from a local `stripe listen` forwarder, so it wasn't admissible evidence); the return from Stripe rendered the app with a "Payment received" banner and updated balance; a generation succeeded and charged 16 tokens; the preview iframe rendered the styled generated site; deploy produced a live Vercel URL returning 200 and charged 20 tokens; and the ledger/purchases/generations/deployments tables all reflected the sequence with running balances agreeing at every step (48876 → 48860 → 48840). Zero browser console errors.
 
-**Remaining**
-
-README, walkthrough video.
+- Final hardening before submission. Three gaps found by auditing the README's claims against the actual code. (1) `SandboxService` existed but was never called — nothing imported it, so `POST /api/deploy/:id` went straight from stored files to Vercel with no validation step, while the README implied otherwise. It is now called before the Vercel push, gated behind `SANDBOX_ENABLED` (off unless exactly `true`): a rejection returns 422 with the reason and creates no `Deployment` row, so a generation that fails validation isn't left with a phantom record blocking a later attempt. The flag stays off in production for an infrastructural reason, not a philosophical one — Render runs this API inside a container with no Docker daemon, so enabling it there would fail every deploy on the absence of a daemon rather than on anything about the generated site. (2) `reconstructBalance()` was dead code, which made the README's "reconstructable from history alone" claim an assertion rather than something exercised; `GET /api/ledger` now computes both the running-balance snapshot and the from-scratch sum on every request and returns them as a `reconciliation` object, logging an error if they ever diverge. The frontend loads that endpoint on mount, so the invariant runs continuously. (3) The README's stated generation failure rate ("one in three") understated reality: the database shows 15 of 24 generations failed validation, 63%, so the figure was corrected rather than left flattering. Also removed the inaccurate "routes call exactly one service" claim (the read-only routes query Prisma directly), added the `max(1, …)` floor to the documented pricing formula, and replaced a non-reconciling ledger example with a consecutive slice of real rows whose arithmetic actually follows.
 
 - Cold-start handling and history hygiene (post-deployment polish, driven by what a reviewer would actually hit first). Render's free tier sleeps after ~15 minutes idle, so the first request can take 30-60s or fail outright — and the frontend was swallowing those failures (`.catch(() => {})`), leaving a `—` balance and tables asserting "No activity yet.", which is indistinguishable from a broken app. `loadInitialData()` now retries the initial load for ~90s, surfaces a "Waking up the server" explanation once it's clearly not instant (a 2.5s threshold, so it never flashes on a warm API), shows "Loading…" rather than claiming there's no data, recovers on its own with no refresh, and falls back to a Retry button. The GET helpers also throw on a non-OK status instead of quietly yielding `undefined`, since a sleeping instance answers with a 502 HTML page. Verified by pointing a local build at a dead port (confirmed the notice appears and the tables say "Loading…"), then bringing an API up mid-retry and confirming the page filled in **without a refresh**; and separately against the live warm site, confirming neither banner appears and load takes ~1.4s.
 
   Separately, abandoned checkouts turned out to leave `PENDING` purchase rows permanently: a `Purchase` row is created *before* redirecting to Stripe so the webhook can find it by session id (which is what makes crediting idempotent), so anyone who opens Checkout and backs out — a very likely reviewer action — leaves one behind. Deleting them by hand is whack-a-mole, so `/api/history` now excludes `PENDING`. The rows stay in the database, since the webhook's idempotency guarantees depend on them; they're simply not surfaced until payment is confirmed. Three earlier probe rows created during deployment testing were also expired in Stripe (so they can never be paid and fire a webhook for a row that no longer exists) and deleted, guarded by checks that each was `unpaid` in Stripe with no invoice and no ledger entry.
+
+**Remaining**
+
+Walkthrough video. (README written and fact-checked against the code.)
 
 **Known operational notes for the README**
 
@@ -179,7 +181,6 @@ mini-lovable/
 │           ├── config/          pricing, token packs
 │           └── index.ts
 │
-├── packages/shared/             types shared across both apps
 ├── docker/sandbox.Dockerfile    isolated build image
 ├── .github/workflows/ci.yml     install, typecheck, lint, build
 ├── .env.example
@@ -190,7 +191,7 @@ Two notes worth recording:
 
 The webhook route needs the raw request body for Stripe signature verification, so it requires its own body-parsing configuration separate from the rest of the app.
 
-`packages/shared` keeps the frontend and backend on the same API payload types instead of duplicating interfaces on both sides. It's the only piece of monorepo tooling here that earns its place.
+The `packages/shared` workspace planned here was dropped. In practice the frontend needed its own view-shaped types rather than the API's row shapes, so a shared package would have held almost nothing; the workspace globs are `apps/*` only.
 
 ---
 

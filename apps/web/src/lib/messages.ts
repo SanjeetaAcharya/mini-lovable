@@ -79,6 +79,16 @@ export function deploymentErrorMessage(
   if (status === 409) {
     return { message: "This site has already been deployed.", detail };
   }
+  if (status === 422) {
+    // Sandbox validation rejected the files. Deterministic for a given
+    // generation, so "try again" would be misleading — the same files
+    // fail the same way. Regenerating is the only path forward.
+    return {
+      message:
+        "The generated site didn't pass safety validation, so it wasn't deployed. You weren't charged. Try generating it again.",
+      detail,
+    };
+  }
   return { message: "Deployment failed. You weren't charged. Please try again.", detail };
 }
 

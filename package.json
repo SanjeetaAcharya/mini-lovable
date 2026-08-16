@@ -2,8 +2,7 @@
   "name": "mini-lovable",
   "private": true,
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "apps/*"
   ],
   "scripts": {
     "dev": "npm run dev --workspace apps/api & npm run dev --workspace apps/web",
