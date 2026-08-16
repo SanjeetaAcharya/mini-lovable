@@ -7,18 +7,18 @@ import {
   getLedger,
   loadInitialData,
   startCheckout,
-  type FileMap,
   type History,
   type LedgerEntry,
   type TokenPack,
 } from "./lib/api";
-import { BalanceBar } from "./components/BalanceBar";
-import { GenerateForm, type GenerationState } from "./components/GenerateForm";
-import { PreviewFrame } from "./components/PreviewFrame";
-import { DeployPanel, type DeployState } from "./components/DeployPanel";
-import { HistoryPanel } from "./components/HistoryPanel";
-import { LoadStatus } from "./components/LoadStatus";
 import { checkoutErrorMessage, type UserFacingError } from "./lib/messages";
+import type { DeployState, GenerationState, View } from "./lib/state";
+import { Sidebar } from "./components/Sidebar";
+import { LoadStatus } from "./components/LoadStatus";
+import { ErrorMessage } from "./components/ErrorMessage";
+import { BuildView } from "./views/BuildView";
+import { HistoryView } from "./views/HistoryView";
+import { BillingView } from "./views/BillingView";
 
 type CheckoutNotice = { kind: "success" | "cancelled" } | null;
 
@@ -27,6 +27,13 @@ type CheckoutNotice = { kind: "success" | "cancelled" } | null;
 type LoadState = "loading" | "waking" | "ready" | "failed";
 
 function App() {
+  // Coming back from Stripe is a billing event, so land on the screen that
+  // shows the result of it. Derived from the URL in the initializer rather
+  // than set from an effect, so the first render is already correct.
+  const [view, setView] = useState<View>(() =>
+    window.location.pathname.startsWith("/purchase/") ? "billing" : "build"
+  );
+
   const [balance, setBalance] = useState<number | null>(null);
   const [packs, setPacks] = useState<TokenPack[]>([]);
   const [buyingPackId, setBuyingPackId] = useState<string | null>(null);
@@ -178,76 +185,77 @@ function App() {
     }
   }
 
-  const previewFiles: FileMap | null = generation.status === "succeeded" ? generation.files : null;
+  const dataLoading = loadState !== "ready" && loadState !== "failed";
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10 text-neutral-900">
-      <header className="mb-10">
-        <h1 className="text-lg font-semibold tracking-tight">mini-lovable</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Generate a static site from a prompt, preview it, and deploy it.
-        </p>
-      </header>
+    <div className="flex min-h-screen">
+      <Sidebar view={view} onNavigate={setView} balance={balance} />
 
-      <LoadStatus
-        state={loadState}
-        onRetry={() => {
-          setLoadState("loading");
-          setReloadKey((k) => k + 1);
-        }}
-      />
-
-      {checkoutNotice && (
-        <div
-          className={`mb-6 flex items-center justify-between rounded border px-3 py-2 text-sm ${
-            checkoutNotice.kind === "success"
-              ? "border-green-300 bg-green-50 text-green-800"
-              : "border-neutral-300 bg-neutral-50 text-neutral-700"
-          }`}
-        >
-          <span>
-            {checkoutNotice.kind === "success" ? "Payment received. Balance updated." : "Checkout cancelled."}
-          </span>
-          <button type="button" onClick={() => setCheckoutNotice(null)} className="ml-3 underline">
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {checkoutError && (
-        <div className="mb-6 space-y-1.5">
-          <p className="text-sm text-red-700">{checkoutError.message}</p>
-          {checkoutError.detail && (
-            <details className="text-xs text-neutral-500">
-              <summary className="cursor-pointer select-none">Technical details</summary>
-              <p className="mt-1 font-mono break-words text-neutral-600">{checkoutError.detail}</p>
-            </details>
-          )}
-        </div>
-      )}
-
-      <section className="border-b border-neutral-200 pb-8">
-        <BalanceBar balance={balance} packs={packs} onBuy={handleBuy} buyingPackId={buyingPackId} />
-      </section>
-
-      <section className="border-b border-neutral-200 py-10">
-        <GenerateForm prompt={prompt} onPromptChange={setPrompt} onSubmit={handleGenerate} state={generation} />
-      </section>
-
-      {previewFiles && (
-        <section className="space-y-5 border-b border-neutral-200 py-10">
-          <PreviewFrame files={previewFiles} />
-          <DeployPanel state={deployment} onDeploy={handleDeploy} />
-        </section>
-      )}
-
-      <section className="pt-12">
-        <HistoryPanel
-          ledger={ledger}
-          history={history}
-          loading={loadState !== "ready" && loadState !== "failed"}
+      <main className="min-w-0 flex-1 px-10 py-8">
+        <LoadStatus
+          state={loadState}
+          onRetry={() => {
+            setLoadState("loading");
+            setReloadKey((k) => k + 1);
+          }}
         />
-      </section>
+
+        {checkoutNotice && (
+          <div
+            className={`mb-6 flex items-center justify-between rounded-lg border px-4 py-2.5 text-sm ${
+              checkoutNotice.kind === "success"
+                ? "border-pos/30 bg-pos/10 text-pos"
+                : "border-ink-700 bg-ink-850 text-fg-muted"
+            }`}
+          >
+            <span>
+              {checkoutNotice.kind === "success"
+                ? "Payment received. Balance updated."
+                : "Checkout cancelled."}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCheckoutNotice(null)}
+              className="ml-3 text-xs underline opacity-80 hover:opacity-100"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {checkoutError && (
+          <div className="mb-6">
+            <ErrorMessage error={checkoutError} />
+          </div>
+        )}
+
+        {view === "build" && (
+          <BuildView
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onGenerate={handleGenerate}
+            generation={generation}
+            deployment={deployment}
+            onDeploy={handleDeploy}
+            onTopUp={() => setView("billing")}
+          />
+        )}
+
+        {view === "history" && (
+          <HistoryView history={history} ledger={ledger} packs={packs} loading={dataLoading} />
+        )}
+
+        {view === "billing" && (
+          <BillingView
+            balance={balance}
+            packs={packs}
+            history={history}
+            onBuy={handleBuy}
+            buyingPackId={buyingPackId}
+            loading={dataLoading}
+          />
+        )}
+      </main>
     </div>
   );
 }

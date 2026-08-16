@@ -1,6 +1,43 @@
 @import "tailwindcss";
 
+/* Dark theme with a warm amber accent. Defined as theme tokens so the
+   palette lives in one place rather than being repeated as arbitrary
+   values across components. */
+@theme {
+  --color-ink-950: #0a0a0b;
+  --color-ink-900: #0f0f11;
+  --color-ink-850: #141416;
+  --color-ink-800: #18181b;
+  --color-ink-750: #1d1d21;
+  --color-ink-700: #26262b;
+  --color-ink-600: #34343a;
+
+  --color-fg: #ebe9e6;
+  --color-fg-muted: #8d8b88;
+  --color-fg-dim: #64625f;
+
+  --color-accent: #e0894a;
+  --color-accent-dim: #b06636;
+
+  --color-pos: #6bbf7f;
+  --color-neg: #e0685e;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
+  background: var(--color-ink-950);
+  color: var(--color-fg);
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
