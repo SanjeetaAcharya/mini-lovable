@@ -53,10 +53,10 @@ export function Sidebar({ view, onNavigate, balance }: Props) {
 
       <div className="mt-auto p-3">
         <div className="rounded-lg border border-ink-700 bg-ink-850 p-4">
-          <div className="text-[10px] font-semibold tracking-widest text-fg-dim uppercase">Balance</div>
+          <div className="text-[10px] font-semibold tracking-widest text-fg-muted uppercase">Balance</div>
           <div className="mt-1.5 font-mono text-lg text-fg">
             {balance === null ? (
-              <span className="text-fg-dim">loading</span>
+              <span className="text-fg-muted">loading</span>
             ) : (
               <>
                 {balance.toLocaleString()} <span className="text-sm text-fg-muted">tokens</span>
@@ -69,7 +69,7 @@ export function Sidebar({ view, onNavigate, balance }: Props) {
           <button
             type="button"
             onClick={() => onNavigate("billing")}
-            className="mt-3 w-full rounded-full border border-ink-600 py-1.5 text-xs text-fg-muted hover:border-ink-600 hover:bg-ink-800 hover:text-fg"
+            className="mt-3 w-full rounded-full border border-ink-500 py-1.5 text-xs text-fg hover:bg-ink-800"
           >
             Top up
           </button>

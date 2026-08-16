@@ -28,7 +28,7 @@ function StatusDot({ status }: { status: string }) {
 }
 
 function EmptyRow({ children }: { children: string }) {
-  return <p className="px-4 py-8 text-sm text-fg-dim">{children}</p>;
+  return <p className="px-4 py-8 text-sm text-fg-muted">{children}</p>;
 }
 
 export function HistoryView({ history, ledger, packs, loading }: Props) {
@@ -76,7 +76,7 @@ export function HistoryView({ history, ledger, packs, loading }: Props) {
                   g.tokensCharged.toLocaleString()
                 )}
               </span>
-              <span className="w-28 shrink-0 text-right font-mono text-xs text-fg-dim">
+              <span className="w-28 shrink-0 text-right font-mono text-xs text-fg-muted">
                 {formatDateTime(g.createdAt)}
               </span>
             </div>
@@ -107,7 +107,7 @@ export function HistoryView({ history, ledger, packs, loading }: Props) {
                     {shortenUrl(d.liveUrl)}
                   </a>
                 ) : (
-                  <span className="text-sm text-fg-dim">Not deployed</span>
+                  <span className="text-sm text-fg-muted">Not deployed</span>
                 )}
               </span>
               <span className="shrink-0 font-mono text-xs text-fg-muted">
@@ -117,7 +117,7 @@ export function HistoryView({ history, ledger, packs, loading }: Props) {
                   d.tokensCharged.toLocaleString()
                 )}
               </span>
-              <span className="w-28 shrink-0 text-right font-mono text-xs text-fg-dim">
+              <span className="w-28 shrink-0 text-right font-mono text-xs text-fg-muted">
                 {formatDateTime(d.createdAt)}
               </span>
             </div>
@@ -133,16 +133,16 @@ export function HistoryView({ history, ledger, packs, loading }: Props) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-ink-800">
-                <th className="px-4 py-3 text-left text-[10px] font-semibold tracking-widest text-fg-dim uppercase">
+                <th className="px-4 py-3 text-left text-[10px] font-semibold tracking-widest text-fg-muted uppercase">
                   Date
                 </th>
-                <th className="px-4 py-3 text-left text-[10px] font-semibold tracking-widest text-fg-dim uppercase">
+                <th className="px-4 py-3 text-left text-[10px] font-semibold tracking-widest text-fg-muted uppercase">
                   Type
                 </th>
-                <th className="px-4 py-3 text-right text-[10px] font-semibold tracking-widest text-fg-dim uppercase">
+                <th className="px-4 py-3 text-right text-[10px] font-semibold tracking-widest text-fg-muted uppercase">
                   Amount
                 </th>
-                <th className="px-4 py-3 text-right text-[10px] font-semibold tracking-widest text-fg-dim uppercase">
+                <th className="px-4 py-3 text-right text-[10px] font-semibold tracking-widest text-fg-muted uppercase">
                   Balance
                 </th>
               </tr>
@@ -150,7 +150,7 @@ export function HistoryView({ history, ledger, packs, loading }: Props) {
             <tbody>
               {ledger.map((entry) => (
                 <tr key={entry.id} className="border-b border-ink-850 last:border-0">
-                  <td className="px-4 py-3 font-mono text-xs whitespace-nowrap text-fg-dim">
+                  <td className="px-4 py-3 font-mono text-xs whitespace-nowrap text-fg-muted">
                     {formatDateTime(entry.createdAt)}
                   </td>
                   <td className="px-4 py-3 text-fg">
@@ -158,7 +158,7 @@ export function HistoryView({ history, ledger, packs, loading }: Props) {
                   </td>
                   <td
                     className={`px-4 py-3 text-right font-mono ${
-                      entry.amount >= 0 ? "text-pos" : "text-fg-muted"
+                      entry.amount >= 0 ? "text-pos" : "text-fg"
                     }`}
                   >
                     {entry.amount >= 0 ? "+" : ""}
@@ -171,7 +171,7 @@ export function HistoryView({ history, ledger, packs, loading }: Props) {
               ))}
               {ledger.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-sm text-fg-dim">
+                  <td colSpan={4} className="px-4 py-8 text-sm text-fg-muted">
                     {empty("No activity yet.")}
                   </td>
                 </tr>

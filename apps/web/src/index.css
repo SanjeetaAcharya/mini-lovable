@@ -11,16 +11,24 @@
   --color-ink-750: #1d1d21;
   --color-ink-700: #26262b;
   --color-ink-600: #34343a;
+  /* Border for interactive outlines, which need to read as an edge rather
+     than blend into the panel behind them. */
+  --color-ink-500: #62626c;
 
-  --color-fg: #ebe9e6;
-  --color-fg-muted: #8d8b88;
-  --color-fg-dim: #64625f;
+  /* Text steps, chosen against measured contrast on --color-ink-900
+     rather than by eye: fg 16.8:1, fg-muted 9.0:1, fg-dim 5.9:1. Every
+     step clears WCAG AA (4.5:1) for normal-size text, because these are
+     used for real content — dates, counters, empty states — not
+     decoration. */
+  --color-fg: #f2f0ed;
+  --color-fg-muted: #b4b1ac;
+  --color-fg-dim: #918e89;
 
   --color-accent: #e0894a;
   --color-accent-dim: #b06636;
 
   --color-pos: #6bbf7f;
-  --color-neg: #e0685e;
+  --color-neg: #ea7d74;
 }
 
 :root {

@@ -12,8 +12,8 @@ export function PreviewPane({ files, generating }: Props) {
   return (
     <div className="flex h-full flex-col">
       <div className="mb-3 flex items-baseline justify-between">
-        <span className="text-[10px] font-semibold tracking-widest text-fg-dim uppercase">Preview</span>
-        <span className="font-mono text-xs text-fg-dim">{status}</span>
+        <span className="text-[10px] font-semibold tracking-widest text-fg-muted uppercase">Preview</span>
+        <span className="font-mono text-xs text-fg-muted">{status}</span>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-ink-800 bg-ink-900">
@@ -23,7 +23,7 @@ export function PreviewPane({ files, generating }: Props) {
           <span className="h-2 w-2 rounded-full bg-ink-700" />
           <span className="h-2 w-2 rounded-full bg-ink-700" />
           <span className="h-2 w-2 rounded-full bg-ink-700" />
-          <span className="pointer-events-none absolute inset-x-0 text-center font-mono text-xs text-fg-dim">
+          <span className="pointer-events-none absolute inset-x-0 text-center font-mono text-xs text-fg-muted">
             index.html
           </span>
         </div>
@@ -41,8 +41,8 @@ export function PreviewPane({ files, generating }: Props) {
           />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-            <div className="h-10 w-10 rounded-lg border border-dashed border-ink-600" aria-hidden="true" />
-            <p className="max-w-xs text-sm leading-relaxed text-fg-dim">
+            <div className="h-10 w-10 rounded-lg border border-dashed border-ink-500" aria-hidden="true" />
+            <p className="max-w-xs text-sm leading-relaxed text-fg-muted">
               Your generated site renders here in a sandboxed frame before it goes anywhere.
             </p>
           </div>

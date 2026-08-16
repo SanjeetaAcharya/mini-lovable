@@ -60,17 +60,25 @@ export function BuildView({
             maxLength={MAX_PROMPT_LENGTH}
             disabled={generating}
             placeholder="A one-page portfolio site for a photographer, with a hero section and a contact email."
-            className="w-full resize-none bg-transparent p-2 text-sm leading-relaxed text-fg outline-none placeholder:text-fg-dim disabled:opacity-60"
+            className="w-full resize-none bg-transparent p-2 text-sm leading-relaxed text-fg outline-none placeholder:text-fg-muted disabled:opacity-60"
           />
           <div className="flex items-center justify-between pt-2">
-            <span className="font-mono text-xs text-fg-dim">
+            <span className="font-mono text-xs text-fg-muted">
               {prompt.length}/{MAX_PROMPT_LENGTH}
             </span>
+            {/* Generate is the primary action on this screen, so it gets
+                the accent fill. Disabled state uses explicit colours
+                rather than opacity, which would drag the label below a
+                readable contrast ratio. */}
             <button
               type="button"
               onClick={onGenerate}
               disabled={generating || prompt.trim().length === 0}
-              className="rounded-full bg-ink-750 px-5 py-1.5 text-sm text-fg-muted hover:bg-ink-700 hover:text-fg disabled:opacity-50 disabled:hover:bg-ink-750 disabled:hover:text-fg-muted"
+              className={`rounded-full px-5 py-1.5 text-sm font-medium ${
+                generating || prompt.trim().length === 0
+                  ? "cursor-not-allowed bg-ink-800 text-fg-dim"
+                  : "bg-accent text-ink-950 hover:bg-accent/90"
+              }`}
             >
               {generating ? "Generating…" : "Generate"}
             </button>
@@ -101,7 +109,7 @@ export function BuildView({
           <div className="space-y-4 rounded-xl border border-ink-800 bg-ink-900 p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-fg-muted">Generated</span>
-              <span className="font-mono text-xs text-fg-dim">
+              <span className="font-mono text-xs text-fg-muted">
                 {generation.tokensCharged.toLocaleString()} tokens
               </span>
             </div>
@@ -111,21 +119,21 @@ export function BuildView({
                 type="button"
                 onClick={onDeploy}
                 disabled={deployment.status === "loading"}
-                className="w-full rounded-full bg-accent py-2 text-sm font-medium text-ink-950 hover:bg-accent/90 disabled:opacity-60"
+                className="w-full rounded-full py-2 text-sm font-medium bg-accent text-ink-950 hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-ink-800 disabled:text-fg-dim"
               >
                 {deployment.status === "loading" ? "Deploying…" : "Deploy"}
               </button>
             )}
 
             {deployment.status === "loading" && (
-              <p className="text-xs text-fg-muted">Pushing to Vercel. This can take several seconds.</p>
+              <p className="text-sm text-fg-muted">Pushing to Vercel. This can take several seconds.</p>
             )}
 
             {/* The live URL is the payoff of the whole flow, so it gets
                 its own block rather than another line of small text. */}
             {deployment.status === "live" && (
               <div className="rounded-lg border border-ink-700 bg-ink-850 p-3">
-                <div className="text-[10px] font-semibold tracking-widest text-fg-dim uppercase">
+                <div className="text-[10px] font-semibold tracking-widest text-fg-muted uppercase">
                   Live site
                 </div>
                 <a
@@ -136,7 +144,7 @@ export function BuildView({
                 >
                   {deployment.url}
                 </a>
-                <div className="mt-2 font-mono text-xs text-fg-dim">
+                <div className="mt-2 font-mono text-xs text-fg-muted">
                   {deployment.tokensCharged.toLocaleString()} tokens
                 </div>
               </div>

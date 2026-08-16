@@ -10,9 +10,9 @@ export function ErrorMessage({ error }: { error: UserFacingError }) {
     <div className="space-y-1.5">
       <p className="text-sm text-neg">{error.message}</p>
       {error.detail && (
-        <details className="text-xs text-fg-dim">
-          <summary className="cursor-pointer select-none hover:text-fg-muted">Technical details</summary>
-          <p className="mt-1 font-mono break-words text-fg-muted">{error.detail}</p>
+        <details className="text-xs text-fg-muted">
+          <summary className="cursor-pointer select-none hover:text-fg">Technical details</summary>
+          <p className="mt-1 font-mono break-words text-fg">{error.detail}</p>
         </details>
       )}
     </div>
