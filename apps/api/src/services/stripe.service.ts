@@ -39,7 +39,7 @@ export async function createCheckoutSession(userId: string, packId: string) {
           product_data: { name: pack.label },
           unit_amount: pack.amountCents,
         },
-        quantity: 1,
+        quantity: 1, 
       },
     ],
     success_url: `${CLIENT_URL}/purchase/success?session_id={CHECKOUT_SESSION_ID}`,

@@ -29,6 +29,22 @@ export async function appendEntry(input: AppendEntryInput) {
   // lib/prisma.ts for why that's the safe way to retry an atomic
   // operation like this one.
   return withRetry(() => prisma.$transaction(async (tx) => {
+    // Serializes every ledger write for this user against every other one.
+    // Without it the read-then-insert below is not actually atomic: Prisma
+    // runs this transaction at Postgres's default READ COMMITTED, so two
+    // concurrent debits both read the same latest entry, both compute the
+    // same new balance, and both insert against it — spending the same
+    // tokens twice and leaving the running-balance snapshot disagreeing
+    // with the sum of entries. The unique generationId/deploymentId
+    // constraints only stop the *same* generation being charged twice;
+    // they say nothing about two different concurrent debits.
+    //
+    // A row lock rather than isolationLevel: "Serializable" because that
+    // would surface as a serialization failure needing its own retry
+    // classification in lib/prisma.ts, where withRetry currently matches
+    // connection errors only.
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${input.userId} FOR UPDATE`;
+
     const latest = await tx.ledgerEntry.findFirst({
       where: { userId: input.userId },
       orderBy: { createdAt: "desc" },
