@@ -83,7 +83,7 @@ router.post(
     },
   });
 
-  const result = await generateSite(prompt);
+  const result = await generateSite(prompt, generation.id);
 
   if (result.status === "success") {
     try {

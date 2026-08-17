@@ -21,6 +21,32 @@ export type LlmResult =
   | { status: "invalid_output"; reason: string; rawContent: string; usage: LlmUsage; model: string }
   | { status: "error"; message: string };
 
+// How much of a failing model response to put in the logs. Enough to see
+// where the JSON goes wrong (the failures cluster a few thousand
+// characters in), bounded so one bad generation can't flood the log.
+const MAX_LOGGED_CONTENT_CHARS = 4000;
+
+/**
+ * One line per generation attempt, on every path including the successful
+ * one, as a single JSON object so Render's log search can filter on it.
+ * Emitted with console.log/error rather than a logging library because
+ * that's all the rest of this app uses, and Render captures stdout as-is.
+ */
+function logAttempt(fields: Record<string, unknown>, failed: boolean): void {
+  const line = JSON.stringify({ event: "llm.generate", ...fields });
+  if (failed) {
+    console.error(line);
+  } else {
+    console.log(line);
+  }
+}
+
+function truncateForLog(text: string): string {
+  return text.length > MAX_LOGGED_CONTENT_CHARS
+    ? `${text.slice(0, MAX_LOGGED_CONTENT_CHARS)}…[truncated, ${text.length} chars total]`
+    : text;
+}
+
 const SYSTEM_PROMPT = `You are a code generator that produces small static websites.
 
 Given a user's description, generate the complete file contents for a minimal static site that satisfies it.
@@ -40,11 +66,15 @@ Rules:
  * malformed model response — only for the request never completing at all,
  * and even that is caught and returned as a result rather than thrown.
  */
-export async function generateSite(prompt: string): Promise<LlmResult> {
+export async function generateSite(prompt: string, generationId?: string): Promise<LlmResult> {
   const model = process.env.OPENROUTER_MODEL;
   if (!model) {
+    logAttempt({ generationId, outcome: "misconfigured", reason: "OPENROUTER_MODEL is not set" }, true);
     return { status: "error", message: "OPENROUTER_MODEL is not set" };
   }
+
+  const startedAt = Date.now();
+  const elapsed = () => Date.now() - startedAt;
 
   let response: Response;
   try {
@@ -66,18 +96,54 @@ export async function generateSite(prompt: string): Promise<LlmResult> {
       }),
     });
   } catch (err) {
+    logAttempt(
+      { generationId, model, durationMs: elapsed(), outcome: "transport_error", error: (err as Error).message },
+      true
+    );
     return { status: "error", message: `Failed to reach OpenRouter: ${(err as Error).message}` };
   }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
+    logAttempt(
+      {
+        generationId,
+        model,
+        durationMs: elapsed(),
+        outcome: "http_error",
+        httpStatus: response.status,
+        // Rate limits and quota exhaustion on :free models arrive here,
+        // and the reason is only ever in the body.
+        body: truncateForLog(body),
+      },
+      true
+    );
     return {
       status: "error",
       message: `OpenRouter returned ${response.status} ${response.statusText}: ${body.slice(0, 500)}`,
     };
   }
 
-  const data = await response.json();
+  // A 200 whose body isn't JSON would otherwise throw straight past this
+  // function into the error handler, losing the response entirely.
+  let data: any;
+  const rawBody = await response.text();
+  try {
+    data = JSON.parse(rawBody);
+  } catch (err) {
+    logAttempt(
+      {
+        generationId,
+        model,
+        durationMs: elapsed(),
+        outcome: "unparseable_envelope",
+        httpStatus: response.status,
+        body: truncateForLog(rawBody),
+      },
+      true
+    );
+    return { status: "error", message: `OpenRouter returned unparseable JSON: ${(err as Error).message}` };
+  }
 
   const usage: LlmUsage = {
     promptTokens: data?.usage?.prompt_tokens ?? 0,
@@ -85,8 +151,25 @@ export async function generateSite(prompt: string): Promise<LlmResult> {
     costUsd: typeof data?.usage?.cost === "number" ? data.usage.cost : null,
   };
 
+  // The single most diagnostic field on the response: "length" means the
+  // completion hit MAX_COMPLETION_TOKENS and the JSON is cut off
+  // mid-string, which is unrecoverable and looks identical to the model
+  // simply emitting bad JSON unless you log this.
+  const finishReason = data?.choices?.[0]?.finish_reason ?? null;
+  const logBase = {
+    generationId,
+    model,
+    durationMs: elapsed(),
+    httpStatus: response.status,
+    finishReason,
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    costUsd: usage.costUsd,
+  };
+
   const rawContent = data?.choices?.[0]?.message?.content;
   if (typeof rawContent !== "string" || rawContent.trim() === "") {
+    logAttempt({ ...logBase, outcome: "empty_content", envelope: truncateForLog(rawBody) }, true);
     return {
       status: "invalid_output",
       reason: "Empty or missing response content",
@@ -98,9 +181,23 @@ export async function generateSite(prompt: string): Promise<LlmResult> {
 
   const parsed = parseFileMap(rawContent);
   if (!parsed.ok) {
-    return { status: "invalid_output", reason: parsed.reason, rawContent, usage, model };
+    logAttempt(
+      {
+        ...logBase,
+        outcome: "invalid_output",
+        reason: parsed.reason,
+        contentChars: rawContent.length,
+        rawContent: truncateForLog(rawContent),
+      },
+      true
+    );
+    // finish_reason travels with the reason so the stored/returned failure
+    // says whether this was truncation, not just "bad JSON".
+    const reason = finishReason === "length" ? `${parsed.reason} (response truncated at max_tokens)` : parsed.reason;
+    return { status: "invalid_output", reason, rawContent, usage, model };
   }
 
+  logAttempt({ ...logBase, outcome: "success", fileCount: Object.keys(parsed.files).length }, false);
   return { status: "success", files: parsed.files, usage, model };
 }
 
