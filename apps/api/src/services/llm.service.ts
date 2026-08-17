@@ -4,13 +4,18 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 // generation can ever cost — see MIN_BALANCE_FOR_GENERATION in
 // config/pricing.ts, which is derived from this constant.
 //
-// Was 2000, which silently truncated roughly a third of all generations:
-// the completion hit the cap mid-string, the JSON came back unterminated,
-// and the route turned that into a 502. A routine multi-section page is
-// ~6400 characters of JSON-escaped output, so 2000 completion tokens cut
-// a typical response roughly in half. Raise this and the pricing constant
-// together — the pre-flight balance gate is derived from it.
-const MAX_COMPLETION_TOKENS = 8000;
+// This cap is a backstop, not the thing that controls response length —
+// the size budget in SYSTEM_PROMPT is. Raising the cap alone never worked:
+// at 2000 the model truncated mid-JSON, and at 8000 it simply wrote
+// 23,000-28,000 characters and truncated anyway, because nothing bounded
+// how much it produced. With the budget in place, measured completions
+// against the heaviest prompt run 623-4786 tokens, mean ~2100. 6000 sits
+// above that range while keeping the provable worst case — and
+// MIN_BALANCE_FOR_GENERATION, which is derived from it — lower than 8000
+// did. It is not free of truncation: 1 attempt in 15 still hit this
+// ceiling. Raising it trades a higher pre-flight balance gate for that
+// last case, which is a pricing decision, not a correctness one.
+const MAX_COMPLETION_TOKENS = 6000;
 
 export interface FileMap {
   [path: string]: string;
@@ -72,7 +77,9 @@ Rules:
 - Always include "index.html" as one of the files.
 - You may include additional files such as "styles.css" or "script.js" if useful, and reference them from index.html with relative paths.
 - Use plain HTML, CSS, and vanilla JavaScript only — no build step, no frameworks, no external dependencies, no CDN links.
-- Keep the site small: at most 5 files total.
+- Size budget, and it is hard: at most 3 files, no single file over 2500 characters, no more than 6000 characters across all files combined. Write a concise site that fits the budget rather than a thorough one that runs past it.
+- Stay inside the budget by writing less, not by stopping early: no more than 4 page sections, short copy, no filler text.
+- Never inline images. No data: URIs, no base64, no inline SVG placeholders — use a plain relative path like "images/hero.jpg" or a CSS background color instead.
 - Each file's content is a plain string (properly JSON-escaped), not nested JSON.`;
 
 /**

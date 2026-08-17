@@ -84,7 +84,7 @@ The configured model is free, so OpenRouter reports a cost of `$0`. A naive impl
 
 Deploys cost a flat 20 tokens, deliberately not usage-metered, because a deploy is a fixed unit of work, unlike a generation.
 
-Generation is gated on a minimum balance of 50 tokens, derived rather than guessed: a 2,000-character prompt plus the system prompt plus the 2,000-token completion cap is about 2,700 LLM tokens worst case, which prices out at roughly 41 internal tokens. The cap on completion tokens exists specifically so this ceiling is provable.
+Generation is gated on a minimum balance of 130 tokens, derived rather than guessed: a 2,000-character prompt plus the system prompt plus the 6,000-token completion cap is about 6,850 LLM tokens worst case, which prices out at roughly 103 internal tokens. The cap on completion tokens exists specifically so this ceiling is provable, and the gate moves whenever the cap does.
 
 ---
 
@@ -124,13 +124,15 @@ That is the honest state of it. The validation is wired into the deploy path and
 
 ## Handling bad LLM output
 
-The model is not trusted to follow instructions. The system prompt specifies the exact JSON shape and forbids prose, fences, frameworks, and CDN links; the request sets `response_format: json_object`; and the response is still parsed defensively: strip fences if they appear, narrow to the outermost braces, parse, then validate the structure, the file count, each path, each size, and the presence of `index.html`.
+The model is not trusted to follow instructions. The system prompt specifies the exact JSON shape, forbids prose, fences, frameworks, and CDN links, and imposes a hard size budget (at most 3 files, 2,500 characters per file, 6,000 characters total, no inline data URIs); the request sets `response_format: json_object`; and the response is still parsed defensively: strip fences if they appear, narrow to the outermost braces, parse, then validate the structure, the file count, each path, each size, and the presence of `index.html`.
+
+The size budget is load-bearing rather than cosmetic. Without it the file-count limit was the only bound, and the model satisfied it by writing five enormous files — 23,000 to 28,000 characters — that ran past any completion cap and came back as unterminated JSON. Raising the cap from 2,000 to 8,000 did not help; the model expanded to fill it and truncated at the new ceiling instead. Constraining output length is what fixed it, and the cap is now a backstop above the observed maximum rather than the thing doing the work.
 
 `generateSite()` returns a discriminated union rather than throwing: `success`, `invalid_output` (the model responded, unusably), or `error` (the request never completed). That distinction drives billing.
 
 **On `invalid_output`, the user isn't charged.** OpenRouter bills me for those tokens regardless, so there's a real cost. But the user asked for a working site and didn't get one. Charging for a failed generation generates support cost worth more than the pennies recovered. The usage is still recorded on the `Generation` row so the failure rate is visible in the data; it just isn't debited. At scale I'd alert on that rate, because a rising one means my prompt or model choice needs work.
 
-**This is the limitation I'm least comfortable with.** Free-tier models truncate long JSON responses mid-string, and roughly two generations in three fail this way: 15 of the 24 generations in the database failed validation, a 63% failure rate. It's handled correctly, with a clear message, no charge, and no crash, but a reviewer trying a few prompts will hit it, probably more than once. It's a consequence of the $0 budget constraint rather than the architecture; a paid model would largely remove it.
+**This is the limitation I'm least comfortable with.** Free-tier models return JSON they can't keep well-formed. This originally read as a truncation problem — 15 of 24 generations failing, a 63% rate — but truncation turned out to be a symptom: nothing bounded output length, so the model wrote until it hit whatever completion cap it was given. Raising the cap from 2,000 to 8,000 made it worse, not better, because the model expanded to fill the new ceiling. A size budget in the system prompt is what actually fixed that part: attempts against the heaviest prompt went from 5 of 5 truncating to 1 of 15. What remains is the model emitting bad escape sequences and unbalanced braces partway through an otherwise complete response, which no cap can fix, at a rate I could not pin down — two samples of the same prompt gave 4 of 6 and 0 of 4. It's handled correctly, with a clear message, no charge, and no crash, but a reviewer trying a few prompts may still hit it. It's a consequence of the $0 budget constraint rather than the architecture; a paid model would largely remove it.
 
 ---
 
@@ -181,7 +183,7 @@ CI runs on push and PR to `main`: install, `prisma generate`, typecheck, lint, b
 
 **PDF invoices.** The spec calls PDF ideal and hosted HTML acceptable. What's evaluated is the content (item, amount, date, reference number), not the format. A PDF pipeline meant another rendering dependency for no additional signal.
 
-**Model fallback.** Given the malformed-output rate, retrying with a second model is the obvious improvement. I skipped it because it complicates the billing path: usage has to be tracked per attempt, and only the successful attempt should be charged. Deployment and documentation mattered more within the time box. This is the first thing I'd build with more time.
+**Model fallback.** A generation now retries once against the same model on unusable output, with the billing rule that complicated it resolved: usage is tracked per attempt and only the surviving attempt is charged, so a failed attempt is absorbed rather than billed. Truncated responses are deliberately not retried, since an identical request against an identical cap truncates in the same place. Falling back to a *different* model on the second attempt is the remaining improvement, and is now a small change rather than a structural one. Worth noting the retry earned its place on the earlier failure profile; against the current one it rescued neither of the two failures it fired on, so its value is unproven at the present rate.
 
 **Structured logging.** Currently `console.log`. Adequate for a demo, not for production. I'd thread a request id through each request so a single generation could be traced from the API call through the LLM request, ledger write, and deploy. That matters most on billing paths, where "was this user charged twice" needs an answerable audit trail beyond the ledger itself.
 
@@ -223,7 +225,8 @@ Worth being direct about one thing: early in this build I committed `.env` befor
 
 ## Known limitations
 
-- Free-tier LLM truncates long JSON responses; roughly two generations in three fail validation (63% of those in the database). Handled cleanly, but visible.
+- Free-tier LLM still returns malformed JSON on a substantial share of generations. The size budget fixed truncation specifically: before it, 5 of 5 attempts against the heaviest prompt truncated at the completion cap; after it, 1 of 15. What remains is bad escape sequences and unbalanced braces mid-response, which no cap addresses. The residual success rate is unstable — two samples of the same prompt gave 4/6 and 0/4, pooling to 4 of 10 — and the daily request cap below stopped me measuring it properly. Handled cleanly, but visible.
+- OpenRouter's free tier allows 50 model requests per day per account. Exhausting it returns 429, which this app surfaces as a 502 with "Generation failed", indistinguishable at a glance from a malformed-output failure until you read the logs. A reviewer testing repeatedly can hit this and conclude the app is broken when it is rate-limited. Adding 10 credits raises the cap to 1,000/day.
 - Sandbox validation is wired into the deploy path but gated behind `SANDBOX_ENABLED`, and is off on the live deployment because Render provides no Docker daemon. The container path has not been exercised against a real daemon.
 - Render's free tier sleeps after 15 minutes; first request after idle takes 30 to 60 seconds.
 - Neon's free tier suspends on inactivity. The API retries transient connection failures and no longer crashes on them, but a cold database still adds latency.
