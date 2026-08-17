@@ -3,7 +3,14 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 // Bounds worst-case completion length, which in turn bounds what a
 // generation can ever cost — see MIN_BALANCE_FOR_GENERATION in
 // config/pricing.ts, which is derived from this constant.
-const MAX_COMPLETION_TOKENS = 2000;
+//
+// Was 2000, which silently truncated roughly a third of all generations:
+// the completion hit the cap mid-string, the JSON came back unterminated,
+// and the route turned that into a 502. A routine multi-section page is
+// ~6400 characters of JSON-escaped output, so 2000 completion tokens cut
+// a typical response roughly in half. Raise this and the pricing constant
+// together — the pre-flight balance gate is derived from it.
+const MAX_COMPLETION_TOKENS = 8000;
 
 export interface FileMap {
   [path: string]: string;
@@ -18,7 +25,15 @@ export interface LlmUsage {
 
 export type LlmResult =
   | { status: "success"; files: FileMap; usage: LlmUsage; model: string }
-  | { status: "invalid_output"; reason: string; rawContent: string; usage: LlmUsage; model: string }
+  | {
+      status: "invalid_output";
+      reason: string;
+      rawContent: string;
+      usage: LlmUsage;
+      model: string;
+      /** null when the response never got far enough to report one. */
+      finishReason: string | null;
+    }
   | { status: "error"; message: string };
 
 // How much of a failing model response to put in the logs. Enough to see
@@ -65,11 +80,18 @@ Rules:
  * with real usage numbers, or a structured failure. Never throws for a
  * malformed model response — only for the request never completing at all,
  * and even that is caught and returned as a result rather than thrown.
+ *
+ * One attempt only. Callers should go through generateSite, which layers
+ * the retry on top.
  */
-export async function generateSite(prompt: string, generationId?: string): Promise<LlmResult> {
+async function attemptGeneration(
+  prompt: string,
+  generationId: string | undefined,
+  attempt: number
+): Promise<LlmResult> {
   const model = process.env.OPENROUTER_MODEL;
   if (!model) {
-    logAttempt({ generationId, outcome: "misconfigured", reason: "OPENROUTER_MODEL is not set" }, true);
+    logAttempt({ generationId, attempt, outcome: "misconfigured", reason: "OPENROUTER_MODEL is not set" }, true);
     return { status: "error", message: "OPENROUTER_MODEL is not set" };
   }
 
@@ -97,7 +119,7 @@ export async function generateSite(prompt: string, generationId?: string): Promi
     });
   } catch (err) {
     logAttempt(
-      { generationId, model, durationMs: elapsed(), outcome: "transport_error", error: (err as Error).message },
+      { generationId, attempt, model, durationMs: elapsed(), outcome: "transport_error", error: (err as Error).message },
       true
     );
     return { status: "error", message: `Failed to reach OpenRouter: ${(err as Error).message}` };
@@ -108,6 +130,7 @@ export async function generateSite(prompt: string, generationId?: string): Promi
     logAttempt(
       {
         generationId,
+        attempt,
         model,
         durationMs: elapsed(),
         outcome: "http_error",
@@ -134,6 +157,7 @@ export async function generateSite(prompt: string, generationId?: string): Promi
     logAttempt(
       {
         generationId,
+        attempt,
         model,
         durationMs: elapsed(),
         outcome: "unparseable_envelope",
@@ -158,6 +182,7 @@ export async function generateSite(prompt: string, generationId?: string): Promi
   const finishReason = data?.choices?.[0]?.finish_reason ?? null;
   const logBase = {
     generationId,
+    attempt,
     model,
     durationMs: elapsed(),
     httpStatus: response.status,
@@ -176,6 +201,7 @@ export async function generateSite(prompt: string, generationId?: string): Promi
       rawContent: typeof rawContent === "string" ? rawContent : "",
       usage,
       model,
+      finishReason,
     };
   }
 
@@ -194,11 +220,55 @@ export async function generateSite(prompt: string, generationId?: string): Promi
     // finish_reason travels with the reason so the stored/returned failure
     // says whether this was truncation, not just "bad JSON".
     const reason = finishReason === "length" ? `${parsed.reason} (response truncated at max_tokens)` : parsed.reason;
-    return { status: "invalid_output", reason, rawContent, usage, model };
+    return { status: "invalid_output", reason, rawContent, usage, model, finishReason };
   }
 
   logAttempt({ ...logBase, outcome: "success", fileCount: Object.keys(parsed.files).length }, false);
   return { status: "success", files: parsed.files, usage, model };
+}
+
+/**
+ * Runs a generation, retrying once if the model returns unusable output.
+ *
+ * The model intermittently emits JSON with invalid escape sequences —
+ * inconsistently escaping backslashes, sometimes twice in the same
+ * response — which discards an otherwise complete site over one bad
+ * character. That's nondeterministic, so the same prompt usually succeeds
+ * on a second pass.
+ *
+ * Deliberately does NOT retry a truncated response: finish_reason
+ * "length" means the completion hit MAX_COMPLETION_TOKENS, and re-running
+ * an identical request against an identical cap just spends a second call
+ * to truncate in the same place. Transport and HTTP errors aren't retried
+ * either — those are rate limits and outages, where an immediate retry is
+ * the wrong response.
+ *
+ * The failed attempt's tokens really were spent, but the caller only ever
+ * sees the surviving attempt's usage. That follows the existing rule in
+ * routes/generate.ts: the user isn't charged for our own failed output.
+ */
+export async function generateSite(prompt: string, generationId?: string): Promise<LlmResult> {
+  const first = await attemptGeneration(prompt, generationId, 1);
+  if (first.status !== "invalid_output" || first.finishReason === "length") {
+    return first;
+  }
+
+  const second = await attemptGeneration(prompt, generationId, 2);
+  logAttempt(
+    {
+      generationId,
+      outcome: "retry_complete",
+      firstReason: first.reason,
+      // Both attempts' tokens were really consumed; only the second is
+      // billed, so this line is the only place the absorbed cost appears.
+      discardedPromptTokens: first.usage.promptTokens,
+      discardedCompletionTokens: first.usage.completionTokens,
+      discardedCostUsd: first.usage.costUsd,
+      secondStatus: second.status,
+    },
+    second.status !== "success"
+  );
+  return second;
 }
 
 function parseFileMap(rawContent: string): { ok: true; files: FileMap } | { ok: false; reason: string } {

@@ -52,10 +52,17 @@ export const MIN_GENERATION_CHARGE_TOKENS = 1;
 // — so we never spend real OpenRouter usage on a request we already know
 // we can't bill for. Derived from the hard caps enforced elsewhere: a
 // ~2000-character prompt (~500 tokens) + the system prompt (~200 tokens)
-// + MAX_COMPLETION_TOKENS on the OpenRouter request (2000 completion
-// tokens) is ~2700 tokens worst case, which prices out to ~41 internal
+// + MAX_COMPLETION_TOKENS on the OpenRouter request (8000 completion
+// tokens) is ~8700 tokens worst case, which prices out to ~131 internal
 // tokens at the rates above. Rounded up with headroom.
-export const MIN_BALANCE_FOR_GENERATION = 50;
+//
+// Moves in lockstep with MAX_COMPLETION_TOKENS in services/llm.service.ts
+// — that cap went 2000 -> 8000 to stop truncating responses mid-JSON, so
+// worst-case spend per generation roughly tripled and this gate has to
+// cover it. A generation that retries spends two calls, but only the
+// surviving attempt is ever billed, so one call's worth is the right
+// reservation.
+export const MIN_BALANCE_FOR_GENERATION = 180;
 
 // --- Deployment pricing ---------------------------------------------------
 //
